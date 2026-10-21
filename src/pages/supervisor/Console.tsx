@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { ClipboardList, ClipboardPlus, FileBarChart, FlaskConical, LogOut, MonitorCog, MonitorPlay, Package, Scale, ScrollText, UserCog, Wifi, WifiOff } from 'lucide-react';
-import { CompanyLogo, DeveloperLogo, Logo } from '@/components/Logo';
+import { CompanyLogo, Logo } from '@/components/Logo';
 import { useMe, useSignOut } from '@/hooks/useMe';
 import { api } from '@/lib/api';
 import { useSocketStatus } from '@/lib/socket';
@@ -75,7 +75,7 @@ export function SupervisorConsole() {
     <div className="flex h-full bg-mist print:block print:h-auto print:bg-white">
       <aside className={cn('no-print w-64 shrink-0 flex-col bg-navy text-white', fullscreen ? 'hidden' : 'flex')}>
         <div className="flex flex-col gap-4 px-5 py-5">
-          <Logo />
+          <Logo byline />
           <div className="flex justify-center rounded-lg bg-white px-3 py-2">
             <CompanyLogo className="h-9" />
           </div>
@@ -110,10 +110,6 @@ export function SupervisorConsole() {
             <button onClick={() => void signOut()} className="grid size-10 place-items-center rounded-lg bg-white/10 hover:bg-white/20" title="Sign out" aria-label="Sign out">
               <LogOut className="size-5" />
             </button>
-          </div>
-          <div className="mt-3 flex flex-col items-center gap-1 rounded-lg bg-white px-3 pb-2 pt-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">Developed by</span>
-            <DeveloperLogo className="h-11" />
           </div>
         </div>
       </aside>

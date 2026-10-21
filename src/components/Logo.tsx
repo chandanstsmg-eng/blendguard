@@ -42,13 +42,26 @@ export function DeveloperCredit({ className, dark = false }: { className?: strin
   );
 }
 
-export function Logo({ className, light = true }: { className?: string; light?: boolean }) {
-  return (
-    <div className={cn('flex items-center gap-3', className)}>
+/** BlendGuard; with `byline`, signed "A product of DhishaAI" underneath (for the navy panels). */
+export function Logo({ className, light = true, byline = false }: { className?: string; light?: boolean; byline?: boolean }) {
+  const mark = (
+    <div className={cn('flex items-center gap-3', !byline && className)}>
       <LogoMark />
       <span className={cn('font-display text-[1.65rem] font-bold leading-none tracking-wide', light ? 'text-white' : 'text-navy')}>
         Blend<span className="text-orange">Guard</span>
       </span>
+    </div>
+  );
+  if (!byline) return mark;
+  return (
+    <div className={cn('flex flex-col items-start gap-2.5', className)}>
+      {mark}
+      <div className="flex items-center gap-2.5 text-xs font-medium uppercase tracking-wider text-blue-300">
+        A product of
+        <span className="rounded-md bg-white px-2 py-1">
+          <DeveloperLogo className="h-7" />
+        </span>
+      </div>
     </div>
   );
 }

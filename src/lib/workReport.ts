@@ -171,7 +171,7 @@ export async function buildReportPdf(run: RunState, operator: ReportPerson | nul
   const res = station?.scaleResolutionMg ?? 10;
   const po = run.processOrder;
   const title = po ? 'PROCESS ORDER' : 'BATCH RECORD';
-  doc.setProperties({ title: `${po ? `Process Order ${po.processOrder}` : 'Batch record'} - ${run.batchNo}`, subject: extras.heading, creator: 'BlendGuard', author: company?.name ?? '' });
+  doc.setProperties({ title: `${po ? `Process Order ${po.processOrder}` : 'Batch record'} - ${run.batchNo}`, subject: extras.heading, creator: 'BlendGuard by DhishaAI', author: company?.name ?? '' });
 
   // ── Company block ──
   let y = 24;

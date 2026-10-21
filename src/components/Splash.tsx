@@ -1,10 +1,10 @@
 import { useT } from '@/lib/i18n';
-import { LogoMark } from './Logo';
+import { DeveloperCredit, LogoMark } from './Logo';
 
 export function Splash({ error }: { error?: boolean }) {
   const t = useT();
   return (
-    <div className="grid h-full place-items-center bg-navy text-white">
+    <div className="relative grid h-full place-items-center bg-navy text-white">
       <div className="flex flex-col items-center gap-5 text-center">
         <LogoMark className="size-20" />
         {error ? (
@@ -19,6 +19,7 @@ export function Splash({ error }: { error?: boolean }) {
           <p className="font-display text-2xl tracking-wide text-blue-300">BlendGuard</p>
         )}
       </div>
+      <DeveloperCredit dark className="absolute bottom-6 left-1/2 -translate-x-1/2" />
     </div>
   );
 }

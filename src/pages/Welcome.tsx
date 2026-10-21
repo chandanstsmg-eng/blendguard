@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
 import { AlertTriangle, ArrowLeft, Fingerprint, KeyRound, Loader2, MonitorX, ScanFace, ShieldCheck, UserRoundCog } from 'lucide-react';
-import { CompanyLogo, DeveloperCredit, Logo } from '@/components/Logo';
+import { CompanyLogo, Logo } from '@/components/Logo';
 import { Button } from '@/components/ui/button';
 import { LanguageSwitch } from '@/components/operator/LanguageSwitch';
 import { Keypad } from '@/components/operator/Keypad';
@@ -79,7 +79,7 @@ export function Welcome() {
     <div className="flex h-full flex-col lg:flex-row">
       {/* Brand panel */}
       <aside className="flex shrink-0 flex-col justify-between bg-navy p-8 text-white lg:w-[38%] lg:p-12 short:lg:p-8 tiny:p-5 tiny:lg:p-6">
-        <Logo />
+        <Logo byline />
         <div className="my-10 lg:my-0">
           <div className="text-blue-300">
             {t('station')} · <span className="font-mono">{station.code}</span>
@@ -128,7 +128,6 @@ export function Welcome() {
             </motion.div>
           </AnimatePresence>
         </div>
-        <DeveloperCredit className="shrink-0 justify-end px-5 pb-4 short:pb-2 tiny:hidden" />
       </main>
     </div>
   );
@@ -391,7 +390,7 @@ function NoStation({ mode, setMode, onSupervisor }: { mode: Mode; setMode: (m: M
     <div className="flex h-full flex-col bg-navy text-white">
       <div className="flex items-center justify-between gap-4 p-6">
         <div className="flex items-center gap-5">
-          <Logo />
+          <Logo byline />
           <span className="rounded-xl bg-white px-4 py-2">
             <CompanyLogo className="h-10" />
           </span>
@@ -415,7 +414,6 @@ function NoStation({ mode, setMode, onSupervisor }: { mode: Mode; setMode: (m: M
           </div>
         )}
       </div>
-      <DeveloperCredit dark className="justify-end p-6 pt-0" />
     </div>
   );
 }
