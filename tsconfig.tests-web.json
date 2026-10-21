@@ -1,0 +1,6 @@
+{
+  // Tests of screen code (e.g. how spoken phrases are put together): browser types plus Node for the test itself.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": ["vite/client", "node"] },
+  "include": ["src", "shared", "tests/voice.test.ts"]
+}

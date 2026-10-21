@@ -1,0 +1,522 @@
+// BlendGuard local manufacturing database.
+//
+// Conventions
+//  - All weights are whole milligrams (Int). Never floats: acceptance decisions
+//    must be exact and must not depend on rounding.
+//  - Manufacturing measurements and audit events are append-only. Database
+//    triggers (see migrations/*_immutability) refuse UPDATE/DELETE on them.
+//  - Every row has a UUID so local and cloud copies stay traceable (Phase 5).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// SUPERVISOR is shown as "Scientist": runs the floor and sets the system up.
+enum Role {
+  OPERATOR
+  SUPERVISOR
+}
+
+enum BatchStatus {
+  ASSIGNED
+  IN_PROGRESS
+  PAUSED
+  ON_HOLD
+  AWAITING_SUBMISSION
+  /// Every available ingredient is done; one or more skipped ingredients wait for the lab report.
+  AWAITING_LAB
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  CORRECTION
+}
+
+enum StepStatus {
+  LOCKED
+  CURRENT
+  COMPLETED
+  ON_HOLD
+  /// Skipped by a supervisor until the lab report clears the ingredient.
+  SKIPPED
+}
+
+enum StepStage {
+  FIND
+  SCAN
+  WEIGH
+  DONE
+}
+
+enum FormulaStatus {
+  DRAFT
+  APPROVED
+  SUPERSEDED
+}
+
+enum LotStatus {
+  RELEASED
+  QUARANTINE
+  REJECTED
+}
+
+enum ScaleMode {
+  SIMULATED
+  SERIAL
+  BRIDGE
+}
+
+enum Priority {
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum ReadingPurpose {
+  TARE
+  ACCEPT_ATTEMPT
+  AUTO_OVERWEIGHT
+  ACCEPTED
+}
+
+enum ReadingVerdict {
+  UNDER
+  OK
+  OVER
+  UNSTABLE
+  DISCONNECTED
+  NOT_TARED
+  NOT_VALIDATED
+  CANNOT_CERTIFY
+}
+
+enum DeviationType {
+  OVERWEIGHT
+  VESSEL_CHANGED
+  OTHER
+}
+
+enum CallStatus {
+  OPEN
+  ACKNOWLEDGED
+  CLOSED
+}
+
+enum SyncStatus {
+  PENDING
+  SYNCED
+  FAILED
+}
+
+model User {
+  id             String    @id @default(uuid())
+  /// Numeric ID printed on the operator's badge. Operators only.
+  operatorCode   String?   @unique
+  /// Sign-in name for supervisors and admins.
+  username       String?   @unique
+  name           String
+  role           Role
+  pinHash        String?
+  passwordHash   String?
+  language       String    @default("en")
+  active         Boolean   @default(true)
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  credentials   WebAuthnCredential[]
+  sessions      Session[]
+  stationAccess StationAccess[]
+  batches       Batch[]              @relation("BatchOperator")
+  backupBatches Batch[]              @relation("BatchBackupOperator")
+  calls         SupervisorCall[]     @relation("CallRaisedBy")
+}
+
+/// A device-bound passkey (Windows Hello fingerprint/face, FIDO2 fingerprint key).
+/// Only the public key is stored. No fingerprint or face data ever reaches BlendGuard.
+model WebAuthnCredential {
+  id           String    @id
+  userId       String
+  user         User      @relation(fields: [userId], references: [id])
+  publicKey    Bytes
+  counter      BigInt    @default(0)
+  transports   String[]
+  aaguid       String?
+  label        String
+  deviceType   String?
+  stationId    String?
+  enrolledById String
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+  revokedAt    DateTime?
+
+  @@index([userId])
+}
+
+model Session {
+  id         String    @id
+  userId     String
+  user       User      @relation(fields: [userId], references: [id])
+  stationId  String?
+  method     String
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  endedAt    DateTime?
+
+  @@index([userId])
+}
+
+/// One-time WebAuthn challenges, kept server-side.
+model AuthChallenge {
+  id        String   @id @default(uuid())
+  challenge String   @unique
+  purpose   String
+  userId    String?
+  stationId String?
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+}
+
+model Station {
+  id                  String    @id @default(uuid())
+  code                String    @unique
+  name                String
+  /// sha256 of the token stored in the station computer's cookie.
+  tokenHash           String?   @unique
+  boundAt             DateTime?
+  // Sign-in methods the supervisor permits at this station.
+  allowFingerprint    Boolean   @default(true)
+  allowFace           Boolean   @default(false)
+  allowPin            Boolean   @default(false)
+  allowAssisted       Boolean   @default(true)
+  defaultLanguage     String    @default("en")
+  audioEnabled        Boolean   @default(true)
+  audioVolume         Int       @default(80)
+  allowPause          Boolean   @default(true)
+  /// Save the weight by itself once it has been correct and steady for a moment.
+  autoAccept          Boolean   @default(true)
+  /// Sign the operator out after this many minutes without a touch (0 = never).
+  idleMinutes         Int       @default(10)
+  // Weighing equipment.
+  scaleMode           ScaleMode @default(SIMULATED)
+  scaleModel          String    @default("Simulator")
+  scaleResolutionMg   Int       @default(10)
+  /// Expanded measurement uncertainty from the scale's validation, used as a guard band.
+  scaleUncertaintyMg  Int       @default(20)
+  scaleValidatedUntil DateTime?
+  scaleValidatedAt    DateTime?
+  scaleValidatedById  String?
+  /// Real scale connection (MT-SICS). SERIAL: COM port on the server PC. BRIDGE: COM port on the
+  /// station PC, read by the scale bridge, which signs in with the bridge key.
+  scalePort           String?
+  scaleBaud           Int       @default(9600)
+  scaleFraming        String    @default("8N1")
+  bridgeKeyHash       String?   @unique
+  /// Largest change in vessel weight allowed between two ingredients before a supervisor must check.
+  vesselDriftLimitMg  Int       @default(500)
+  simGrossMg          Int       @default(-1)
+  /// Training simulator: which mixing container (1–3) is on the scale, and what each one holds.
+  simContainer        Int       @default(1)
+  simContentsMg       Int[]     @default([])
+  createdAt          DateTime  @default(now())
+
+  access  StationAccess[]
+  batches Batch[]
+  calls   SupervisorCall[]
+}
+
+model StationAccess {
+  userId    String
+  stationId String
+  user      User    @relation(fields: [userId], references: [id])
+  station   Station @relation(fields: [stationId], references: [id])
+
+  @@id([userId, stationId])
+}
+
+model Rack {
+  code      String @id
+  label     String
+  zone      String
+  rows      Int
+  cols      Int
+  sortOrder Int    @default(0)
+}
+
+model Ingredient {
+  id         String          @id @default(uuid())
+  code       String          @unique
+  name       String
+  /// Barcode on bottles of ingredients that are not lot-tracked.
+  barcode    String?         @unique
+  lotTracked Boolean         @default(false)
+  /// Configured storage location. Null = not configured; the operator is told to call a supervisor.
+  rackCode   String?
+  bin        Int?
+  handling   String[]
+  hazards    String[]
+  /// Protective equipment to show as pictures: GLOVES, MASK, GOGGLES, DROPPER, SPATULA.
+  ppe        String[]
+  /// Cap / sticker colour on the real bottle (#RRGGBB), so operators can match by sight.
+  colorHex   String?
+  /// Photo of the real bottle, uploaded by an admin.
+  photo          Bytes?
+  photoType      String?
+  photoUpdatedAt DateTime?
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+  lots       IngredientLot[]
+  lines      FormulaLine[]
+}
+
+model IngredientLot {
+  id           String     @id @default(uuid())
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  lotNumber    String
+  barcode      String     @unique
+  status       LotStatus  @default(RELEASED)
+  expiresOn    DateTime?
+
+  @@unique([ingredientId, lotNumber])
+}
+
+model Formula {
+  id           String        @id @default(uuid())
+  code         String
+  revision     String
+  perfumeName  String
+  status       FormulaStatus @default(DRAFT)
+  sopNumber    String?
+  batchSizeMg  Int
+  notes        String?
+  /// Uploaded production instruction this revision was created from (kept for traceability).
+  sourceFileName String?
+  sourceFile     String?
+  /// The uploaded process order PDF, when the revision was created from one.
+  sourcePdf      Bytes?
+  /// Header of the process order it came from (process order no., plant, material, batch…).
+  processOrder   Json?
+  importedById   String?
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  lines        FormulaLine[]
+  batches      Batch[]
+
+  @@unique([code, revision])
+}
+
+model FormulaLine {
+  id           String     @id @default(uuid())
+  formulaId    String
+  formula      Formula    @relation(fields: [formulaId], references: [id])
+  seq          Int
+  ingredientId String
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id])
+  targetMg     Int
+  tolMinusMg   Int
+  tolPlusMg    Int
+  remarks      String?
+  /// From the process order: storage location, material batch, unit of measure.
+  storageLocation String?
+  sourceBatch  String?
+  uom          String?
+  /// Ticked "goes for lab test" at upload: skipped by default when a job is assigned.
+  labTest      Boolean  @default(false)
+
+  @@unique([formulaId, seq])
+}
+
+model Batch {
+  id               String      @id @default(uuid())
+  batchNo          String      @unique
+  formulaId        String
+  formula          Formula     @relation(fields: [formulaId], references: [id])
+  stationId        String
+  station          Station     @relation(fields: [stationId], references: [id])
+  operatorId       String
+  operator         User        @relation("BatchOperator", fields: [operatorId], references: [id])
+  backupOperatorId String?
+  backupOperator   User?       @relation("BatchBackupOperator", fields: [backupOperatorId], references: [id])
+  priority         Priority    @default(NORMAL)
+  plannedStart     DateTime?
+  instructions     String?
+  status           BatchStatus @default(ASSIGNED)
+  holdReason       String?
+  /// True when any weight was taken on a simulated scale. Such batches are training records only.
+  simulated        Boolean     @default(false)
+  /// Optimistic lock: every state change increments it.
+  version          Int         @default(0)
+  assignedById     String
+  assignedAt       DateTime    @default(now())
+  startedAt        DateTime?
+  pausedAt         DateTime?
+  completedAt      DateTime?
+  submittedAt      DateTime?
+  submittedById    String?
+  /// Process order header copied from the formula revision (for the PROCESS ORDER report).
+  processOrder     Json?
+  /// Supervisor review of a SUBMITTED batch (password re-entered). Column names start with
+  /// approv / reject: the only columns the database lets change on a submitted batch.
+  approvedById     String?
+  approvedAt       DateTime?
+  approvalNote     String?
+  rejectedById     String?
+  rejectedAt       DateTime?
+  rejectReason     String?
+
+  steps      BatchStep[]
+  deviations Deviation[]
+  readings   WeightReading[]
+
+  @@index([operatorId, status])
+  @@index([stationId, status])
+}
+
+model BatchStep {
+  id             String     @id @default(uuid())
+  batchId        String
+  batch          Batch      @relation(fields: [batchId], references: [id])
+  seq            Int
+  ingredientId   String
+  // Snapshot of the approved formula line at assignment time.
+  ingredientCode String
+  ingredientName String
+  targetMg       Int
+  tolMinusMg     Int
+  tolPlusMg      Int
+  remarks        String?
+  storageLocation String?
+  sourceBatch    String?
+  uom            String?
+  status         StepStatus @default(LOCKED)
+  stage          StepStage  @default(FIND)
+  holdReason     String?
+  startedAt      DateTime?
+  foundAt        DateTime?
+  scannedAt      DateTime?
+  scannedBarcode String?
+  lotId          String?
+  lotNumber      String?
+  wrongScans     Int        @default(0)
+  /// Which mixing container (1–3) the operator chose before zeroing. Locked once set.
+  containerNo    Int?
+  tareGrossMg    Int?
+  taredAt        DateTime?
+  acceptedNetMg  Int?
+  acceptedGrossMg Int?
+  acceptedAt     DateTime?
+  completedById  String?
+  /// Supervisor skipped this ingredient until the lab report (it is added later).
+  skippedAt      DateTime?
+  skippedById    String?
+  skipNote       String?
+  /// Supervisor confirmed the lab ingredient has arrived and may now be added.
+  labReleasedAt  DateTime?
+  labReleasedById String?
+
+  readings   WeightReading[]
+  deviations Deviation[]
+
+  @@unique([batchId, seq])
+}
+
+model WeightReading {
+  id        String         @id @default(uuid())
+  batchId   String
+  batch     Batch          @relation(fields: [batchId], references: [id])
+  stepId    String
+  step      BatchStep      @relation(fields: [stepId], references: [id])
+  purpose   ReadingPurpose
+  grossMg   Int?
+  tareMg    Int?
+  netMg     Int?
+  stable    Boolean
+  verdict   ReadingVerdict
+  source    String
+  scaleModel String
+  userId    String?
+  createdAt DateTime       @default(now())
+
+  @@index([stepId])
+}
+
+model Deviation {
+  id             String        @id @default(uuid())
+  batchId        String
+  batch          Batch         @relation(fields: [batchId], references: [id])
+  stepId         String?
+  step           BatchStep?    @relation(fields: [stepId], references: [id])
+  type           DeviationType
+  details        Json
+  raisedById     String
+  raisedAt       DateTime      @default(now())
+  resolvedById   String?
+  resolvedAt     DateTime?
+  resolution     String?
+  resolutionNote String?
+  /// What the supervisor's resolution was based on (e.g. the vessel gross they accepted, the
+  /// gross before/after removing excess). Written once, at resolution; `details` never changes.
+  resolutionDetails Json?
+
+  @@index([batchId])
+}
+
+/// Supervisor sign-off tokens that have been spent. A token works once only, for one action.
+model SignoffUse {
+  jti       String   @id
+  action    String
+  batchId   String
+  usedById  String
+  usedAt    DateTime @default(now())
+}
+
+model SupervisorCall {
+  id               String     @id @default(uuid())
+  stationId        String
+  station          Station    @relation(fields: [stationId], references: [id])
+  batchId          String?
+  seq              Int?
+  raisedById       String
+  raisedBy         User       @relation("CallRaisedBy", fields: [raisedById], references: [id])
+  reason           String
+  status           CallStatus @default(OPEN)
+  createdAt        DateTime   @default(now())
+  acknowledgedAt   DateTime?
+  acknowledgedById String?
+  closedAt         DateTime?
+  closedById       String?
+}
+
+/// Append-only audit trail. Doubles as the outbox for cloud sync (Phase 5):
+/// only syncStatus / syncedAt / syncError may ever change.
+model AuditEvent {
+  id           String     @id @default(uuid())
+  seqNo        BigInt     @unique @default(autoincrement())
+  at           DateTime   @default(now())
+  userId       String?
+  role         String?
+  batchId      String?
+  stationId    String?
+  type         String
+  details      Json
+  outcome      String
+  prevState    String?
+  newState     String?
+  sourceDevice String?
+  syncStatus   SyncStatus @default(PENDING)
+  syncedAt     DateTime?
+  syncError    String?
+
+  @@index([batchId])
+  @@index([type, at])
+  @@index([syncStatus])
+}

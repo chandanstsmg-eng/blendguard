@@ -1,0 +1,117 @@
+@import 'tailwindcss';
+
+@import '@fontsource/barlow/400.css';
+@import '@fontsource/barlow/500.css';
+@import '@fontsource/barlow/600.css';
+@import '@fontsource/barlow/700.css';
+@import '@fontsource/barlow-condensed/600.css';
+@import '@fontsource/barlow-condensed/700.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/700.css';
+@import '@fontsource/noto-sans-devanagari/400.css';
+@import '@fontsource/noto-sans-devanagari/600.css';
+@import '@fontsource/noto-sans-devanagari/700.css';
+@import '@fontsource/noto-sans-malayalam/400.css';
+@import '@fontsource/noto-sans-malayalam/600.css';
+@import '@fontsource/noto-sans-malayalam/700.css';
+
+/*
+ * Station monitors are often 1366×768 or 1920×1080 with browser/taskbar chrome:
+ * tighten vertical spacing on anything shorter than ~900 px so every operator
+ * step fits on one screen without scrolling.
+ */
+@custom-variant short (@media (max-height: 900px));
+/* Very small station screens (e.g. 1366×768 with browser chrome): one more step tighter. */
+@custom-variant tiny (@media (max-height: 700px));
+
+/*
+ * BlendGuard palette. The operator console is a fixed light theme: it runs on
+ * bright factory-floor touchscreens, so contrast is tuned for that one setting.
+ */
+@theme {
+  --color-navy: #17394c;
+  --color-navy-900: #102a39;
+  --color-blue: #204d62;
+  --color-blue-300: #8fb0c0;
+  --color-orange: #d98236;
+  --color-orange-600: #c06d24;
+  --color-orange-100: #f8e6d4;
+  --color-ivory: #f8f8f5;
+  --color-mist: #eef1f2;
+  --color-line: #d9dfe2;
+  --color-ok: #24844f;
+  --color-ok-100: #dcefe3;
+  --color-warn: #e7a42a;
+  --color-warn-100: #fbefd3;
+  --color-err: #c94343;
+  --color-err-100: #f7dede;
+  --color-ink: #27343d;
+  --color-muted: #5b6b75;
+
+  --font-sans: 'Barlow', 'Noto Sans Devanagari', 'Noto Sans Malayalam', system-ui, sans-serif;
+  --font-display: 'Barlow Condensed', 'Noto Sans Devanagari', 'Noto Sans Malayalam', 'Barlow', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--color-ivory);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+/* Touch screens: no accidental text selection while tapping big buttons. */
+button,
+[role='button'] {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hindi and Malayalam scripts need more line height than the condensed Latin face. */
+:lang(hi) .font-display,
+:lang(ml) .font-display {
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+@keyframes bg-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.animate-bin {
+  animation: bg-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-bin {
+    animation: none;
+  }
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}
